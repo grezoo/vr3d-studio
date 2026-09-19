@@ -740,6 +740,7 @@ class VR3DStudioApp(ctk.CTk):
             title="Kimeneti fájl mentése",
             initialdir=base_dir,
             initialfile=os.path.basename(default_out),
+            defaultextension=".mp4" if self.is_video else ".jpg",
             filetypes=[("Videó fájl", "*.mp4")] if self.is_video else [("Képfájl", "*.jpg *.png")]
         )
         if not out_path:

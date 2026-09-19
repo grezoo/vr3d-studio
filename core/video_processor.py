@@ -234,13 +234,23 @@ class VideoProcessor:
         # Mux original audio track and metadata into the final file
         start_sec = (start_frame / fps) if fps > 0 else 0.0
         dur_sec = (frame_idx / fps) if (max_frames and fps > 0) else None
-        self._mux_audio_and_metadata(input_path, temp_video, output_path, mode=mode, start_sec=start_sec, duration_sec=dur_sec)
-        if os.path.exists(temp_video):
-            os.remove(temp_video)
+        mux_ok = self._mux_audio_and_metadata(input_path, temp_video, output_path, mode=mode, start_sec=start_sec, duration_sec=dur_sec)
+
+        # Safety check: ensure final file exists and is not empty
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 1024:
+            if os.path.exists(temp_video):
+                os.remove(temp_video)
+        else:
+            # Fallback: if audio muxing failed for any reason, preserve the rendered frames!
+            print(f"[Warning] Muxing failed or output missing. Preserving encoded video by renaming to: {output_path}")
+            if os.path.exists(temp_video):
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+                os.rename(temp_video, output_path)
 
         return True
 
-    def _mux_audio_and_metadata(self, original_path: str, temp_video: str, final_path: str, mode: str, start_sec: float = 0.0, duration_sec: float = None):
+    def _mux_audio_and_metadata(self, original_path: str, temp_video: str, final_path: str, mode: str, start_sec: float = 0.0, duration_sec: float = None) -> bool:
         """
         Transfers audio stream from original file and injects 3D/VR180 metadata.
         """
@@ -266,4 +276,12 @@ class VideoProcessor:
             final_path
         ]
 
-        subprocess.run(mux_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            res = subprocess.run(mux_cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
+            if res.returncode != 0:
+                print(f"[FFmpeg Mux Error] Exit code {res.returncode}:\n{res.stderr}")
+                return False
+            return True
+        except Exception as e:
+            print(f"[FFmpeg Mux Exception]: {e}")
+            return False
