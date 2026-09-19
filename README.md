@@ -56,7 +56,23 @@ Double-click `run_converter.bat` or run:
 ```bash
 python main.py
 ```
-Model weights (`depth_anything_v2_vits.pth`, etc.) are downloaded automatically into `weights/` on the first run.
+
+---
+
+## 🤖 AI Models & Automatic Hugging Face Download
+
+VR3D Studio utilizes the state-of-the-art **Depth Anything V2** monocular depth estimation neural network.
+
+**You do NOT need to download models manually or register for API keys.** 
+When you launch the app or select a model in the dropdown, the software **automatically downloads** the verified official weights directly from the [Depth Anything V2 Hugging Face repository](https://huggingface.co/depth-anything) into your local `weights/` folder with a live progress bar:
+
+| Model | Encoder | Download Size | Best For | Typical Speed (RTX 5070) |
+| :--- | :--- | :--- | :--- | :--- |
+| **`vits`** (Small) | ViT-S | **~95 MB** | Real-time preview, quick draft conversions, laptops | **~100+ FPS** |
+| **`vitb`** (Base) | ViT-B | **~390 MB** | Balanced daily video & photo conversions | **~50 FPS** |
+| **`vitl`** (Large) | ViT-L | **~1.28 GB** | Maximum fidelity, fine hair/limb separation, cinematic quality | **~25-30 FPS** |
+
+*All downloaded weights are cached locally in the `weights/` folder and will never be re-downloaded.*
 
 ---
 
