@@ -110,33 +110,29 @@ class StereoWarper:
         map_x = grid_x - shift_map
 
         # Occlusion edge protection:
-        # If a background pixel samples across a sharp depth step towards the foreground,
-        # it causes edge-bleeding (double limb contour).
-        # We detect disocclusion shadows:
-        # For Left Eye: shift is negative for near objects, exposing background to the right of foreground edges
-        # For Right Eye: shift is positive for near objects, exposing background to the left of foreground edges
+        # Prevents foreground objects (human bodies, arms) from leaking ghost contours into background disocclusions.
         clean_shift = shift_map.copy()
 
-        # Edge threshold for depth difference (0.15 normalized depth jump)
-        edge_threshold = 0.12
+        # Edge threshold for depth difference (0.08 catches both sharp and softer body boundaries)
+        edge_threshold = 0.08
         if is_left:
             # Falling edge (foreground on left, background on right): grad_x < -threshold
-            # Disocclusion occurs on the background side
             disoccl_mask = (depth_grad_x < -edge_threshold)
+            # Dilate strictly to the RIGHT into the background disocclusion shadow
+            kernel = np.zeros((1, 9), dtype=np.uint8)
+            kernel[0, 4:] = 1
         else:
             # Rising edge (background on left, foreground on right): grad_x > threshold
-            # Disocclusion occurs on the background side
             disoccl_mask = (depth_grad_x > edge_threshold)
+            # Dilate strictly to the LEFT into the background disocclusion shadow
+            kernel = np.zeros((1, 9), dtype=np.uint8)
+            kernel[0, :5] = 1
 
-        # In disocclusion areas, clamp disparity to background level to stop foreground bleed
-        # Dilate mask slightly horizontally into the shadow zone
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 1))
         disoccl_dilated = cv2.dilate(disoccl_mask.astype(np.uint8), kernel) > 0
 
-        # Replace shift in shadow region with nearby background shift
+        # In disocclusion shadows, completely zero out shift to eliminate double contour bleeding
         if np.any(disoccl_dilated):
-            # Background depth has lower value, so lower magnitude disparity
-            clean_shift[disoccl_dilated] = clean_shift[disoccl_dilated] * 0.25
+            clean_shift[disoccl_dilated] = 0.0
 
         map_x_clean = grid_x - clean_shift
 
