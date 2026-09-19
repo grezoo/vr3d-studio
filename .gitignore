@@ -1,0 +1,59 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Model weights (auto-downloaded at runtime, do not commit multi-gigabyte binaries)
+weights/*.pth
+weights/*.pt
+!weights/.gitkeep
+
+# Temporary & Output media files
+*.mp4
+*.mkv
+*.mov
+*.avi
+*.temp_video.mp4
+tests/output/*
+!tests/output/.gitkeep
+_3D_album/
+
+# Operating System Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
