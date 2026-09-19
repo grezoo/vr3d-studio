@@ -5,6 +5,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.2%2B%20CUDA-ee4c2c.svg)](https://pytorch.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GPU](https://img.shields.io/badge/GPU%20Acceleration-NVIDIA%20NVENC-76b900.svg)](https://developer.nvidia.com/video-encode-decode-gpu-support-matrix)
+[![Donate with Revolut](https://img.shields.io/badge/Donate-Revolut%20%40grezoo-0075eb.svg?style=flat&logo=revolut&logoColor=white)](https://revolut.me/grezoo)
 
 **VR3D Studio** is an open-source, 100% offline, watermark-free desktop application and CLI tool that converts regular 2D videos, photos, and photo albums into stereoscopic 3D Side-by-Side (SBS) and immersive VR180 formats for VR headsets (Pico 4, Meta Quest 2/3/Pro, Apple Vision Pro, Skybox VR).
 
@@ -134,6 +135,17 @@ vr3d-studio/
 │   └── app.py                  # CustomTkinter Dark UI (Wiggle 3D, Presets)
 └── weights/                    # Cached AI weights (auto-downloaded)
 ```
+
+---
+
+## ☕ Support & Donations / Támogatás
+
+If you find **VR3D Studio** helpful and it saved you from expensive commercial subscriptions (like Owl3D), feel free to support the developer and buy me a coffee via Revolut!
+
+[![Donate with Revolut](https://img.shields.io/badge/Donate%20via%20Revolut-%40grezoo-0075eb.svg?style=for-the-badge&logo=revolut&logoColor=white)](https://revolut.me/grezoo)
+
+* **Revolut Revtag:** `@grezoo`
+* **Direct link:** [revolut.me/grezoo](https://revolut.me/grezoo)
 
 ---
 

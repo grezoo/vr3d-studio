@@ -14,6 +14,7 @@ import cv2
 import customtkinter as ctk
 import numpy as np
 from PIL import Image, ImageTk
+import webbrowser
 
 # Setup paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -253,7 +254,23 @@ class VR3DStudioApp(ctk.CTk):
         self.btn_cancel = ctk.CTkButton(
             sidebar, text="⏹ Megszakítás", fg_color="#C0392B", hover_color="#962D22", state="disabled", command=self._cancel_conversion
         )
-        self.btn_cancel.pack(fill="x", padx=15, pady=(0, 20))
+        self.btn_cancel.pack(fill="x", padx=15, pady=(0, 15))
+
+        # --- Revolut Support Box ---
+        donate_frame = ctk.CTkFrame(sidebar, fg_color=("#1A252F", "#141D26"), corner_radius=8, border_width=1, border_color="#2980B9")
+        donate_frame.pack(fill="x", padx=15, pady=(0, 20))
+
+        lbl_donate = ctk.CTkLabel(
+            donate_frame, text="☕ Támogatás / Support:", font=ctk.CTkFont(size=11, weight="bold"), text_color="#3498DB"
+        )
+        lbl_donate.pack(padx=10, pady=(6, 2))
+
+        btn_revolut = ctk.CTkButton(
+            donate_frame, text="💙 Revolut: @grezoo", fg_color="#0075EB", hover_color="#005BBB", height=28,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=lambda: webbrowser.open("https://revolut.me/grezoo")
+        )
+        btn_revolut.pack(fill="x", padx=10, pady=(2, 8))
 
         # ==========================================
         # 2. MAIN AREA: Preview & Progress
