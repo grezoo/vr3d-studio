@@ -132,6 +132,7 @@ class VR3DStudioApp(ctk.CTk):
 
         # Display mapping dictionaries
         self.MODEL_DISPLAY_MAP = {
+            "🔥 Hibrid Fúzió (Depth Anything + Marigold)": "hybrid",
             "Depth Anything V2 (Kis / Villámgyors)": "vits",
             "Depth Anything V2 (Közepes / Kiegyensúlyozott)": "vitb",
             "Depth Anything V2 (Nagy / Csúcsminőség)": "vitl",

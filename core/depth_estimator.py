@@ -57,11 +57,11 @@ class DepthEstimator:
             weights_dir: Directory where model weights are cached
             device: 'cuda' or 'cpu' (defaults to cuda if available)
         """
-        if model_size not in MODEL_CONFIGS and model_size != "marigold":
-            raise ValueError(f"Unknown model size: {model_size}. Choose from {list(MODEL_CONFIGS.keys()) + ['marigold']}")
+        if model_size not in MODEL_CONFIGS and model_size not in ["marigold", "hybrid"]:
+            raise ValueError(f"Unknown model size: {model_size}. Choose from {list(MODEL_CONFIGS.keys()) + ['marigold', 'hybrid']}")
 
         self.model_size = model_size
-        self.config = MODEL_CONFIGS.get(model_size, {})
+        self.config = MODEL_CONFIGS.get("vits" if model_size == "hybrid" else model_size, {})
         self.pipe = None
 
         if device is None:
@@ -72,6 +72,8 @@ class DepthEstimator:
         if model_size == "marigold":
             self._load_marigold()
             return
+        elif model_size == "hybrid":
+            self._load_marigold()
 
         if weights_dir is None:
             base_project = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -121,6 +123,17 @@ class DepthEstimator:
             with torch.no_grad():
                 self.model.infer_image(dummy, input_size=256)
 
+    def _estimate_marigold(self, image_bgr: np.ndarray) -> np.ndarray:
+        from PIL import Image
+        rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(rgb)
+        with torch.no_grad():
+            out = self.pipe(pil_img, num_inference_steps=4)
+        depth_pred = np.squeeze(out.prediction)
+        d_min, d_max = depth_pred.min(), depth_pred.max()
+        norm_depth = 1.0 - (depth_pred - d_min) / max(1e-6, (d_max - d_min))
+        return norm_depth.astype(np.float32)
+
     def estimate_depth(self, image_bgr: np.ndarray, input_size: int = 518) -> np.ndarray:
         """
         Estimates normalized depth map for a single BGR image.
@@ -135,24 +148,25 @@ class DepthEstimator:
             1.0 = closest to camera, 0.0 = furthest in background.
         """
         if self.model_size == "marigold":
-            from PIL import Image
-            rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-            pil_img = Image.fromarray(rgb)
-            with torch.no_grad():
-                out = self.pipe(pil_img, num_inference_steps=4)
-            depth_pred = np.squeeze(out.prediction)
-            d_min, d_max = depth_pred.min(), depth_pred.max()
-            norm_depth = 1.0 - (depth_pred - d_min) / max(1e-6, (d_max - d_min))
-            return norm_depth.astype(np.float32)
+            return self._estimate_marigold(image_bgr)
 
         raw_depth = self.model.infer_image(image_bgr, input_size=input_size)
-
         d_min = raw_depth.min()
         d_max = raw_depth.max()
         if d_max - d_min > 1e-6:
             norm_depth = (raw_depth - d_min) / (d_max - d_min)
         else:
             norm_depth = np.zeros_like(raw_depth, dtype=np.float32)
+
+        if self.model_size == "hybrid":
+            d_mari = self._estimate_marigold(image_bgr)
+            d_mari = cv2.resize(d_mari, (norm_depth.shape[1], norm_depth.shape[0]))
+            # 60% Depth Anything (clean edges/anatomy) + 40% Marigold (organic volume)
+            fused = 0.60 * norm_depth + 0.40 * d_mari
+            p2 = float(np.percentile(fused, 2))
+            p98 = float(np.percentile(fused, 98))
+            fused = np.clip((fused - p2) / max(1e-6, (p98 - p2)), 0.0, 1.0)
+            return fused.astype(np.float32)
 
         return norm_depth.astype(np.float32)
 
