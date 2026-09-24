@@ -98,46 +98,36 @@ class StereoWarper:
         is_left: bool
     ) -> np.ndarray:
         """
-        Renders a single eye view using physical background inpainting for disocclusion gaps.
-        Strictly prevents foreground objects (limbs, bodies) from leaking double-contour ghost
-        strips into adjacent background pixels.
+        Renders a single eye view using precise disocclusion hole detection and
+        OpenCV Telea inpainting to eliminate all ghost strips and edge-bleeding artifacts.
         """
         h, w = image.shape[:2]
 
         map_x = grid_x - shift_map
 
-        # Sampled source depth
-        sampled_x = np.clip(np.round(map_x).astype(np.int32), 0, w - 1)
-        gy_int = grid_y.astype(np.int32)
-        sampled_d = depth[gy_int, sampled_x]
-
-        # Detect disocclusion leak:
-        # A destination pixel is background, but backward remap incorrectly reached into a foreground object.
-        leak_mask = (sampled_d > depth + 0.06)
-
-        # Dilate 2px horizontally in the disocclusion direction to clean up edge anti-aliasing
-        kernel = np.ones((1, 3), dtype=np.uint8)
-        leak_dilated = cv2.dilate(leak_mask.astype(np.uint8), kernel) > 0
-
-        # In disocclusion gaps, clamp map_x to strictly sample from the background
-        map_x_clean = map_x.copy()
-        if is_left:
-            # Left eye: foreground shifted left, hole opened on right of subject.
-            # Backward map reached left (< grid_x) into foreground. Clamp to background (>= grid_x).
-            map_x_clean = np.where(leak_dilated, np.maximum(map_x, grid_x), map_x)
-        else:
-            # Right eye: foreground shifted right, hole opened on left of subject.
-            # Backward map reached right (> grid_x) into foreground. Clamp to background (<= grid_x).
-            map_x_clean = np.where(leak_dilated, np.minimum(map_x, grid_x), map_x)
-
-        # Remap with edge clamping
+        # Base remap
         warped = cv2.remap(
             image,
-            map_x_clean.astype(np.float32),
+            map_x.astype(np.float32),
             grid_y,
             interpolation=cv2.INTER_LINEAR,
             borderMode=cv2.BORDER_REPLICATE
         )
+
+        # Detect disocclusion holes:
+        # Destination pixel is background, but backward map reached into a foreground object.
+        sampled_x = np.clip(np.round(map_x).astype(np.int32), 0, w - 1)
+        gy_int = grid_y.astype(np.int32)
+        sampled_d = depth[gy_int, sampled_x]
+
+        leak_mask = (sampled_d > depth + 0.06).astype(np.uint8) * 255
+
+        if np.any(leak_mask):
+            kernel = np.ones((3, 3), dtype=np.uint8)
+            leak_dilated = cv2.dilate(leak_mask, kernel, iterations=1)
+            inpainted = cv2.inpaint(warped, leak_dilated, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
+            return inpainted
+
         return warped
 
     def create_sbs(
