@@ -98,8 +98,9 @@ class StereoWarper:
         is_left: bool
     ) -> np.ndarray:
         """
-        Renders a single eye view using precise disocclusion hole detection and
-        OpenCV Telea inpainting to eliminate all ghost strips and edge-bleeding artifacts.
+        Renders a single eye view using vectorized forward hole detection combined with
+        OpenCV Telea inpainting. Eliminates both trailing edge disocclusion gaps (where objects moved away)
+        and leading edge background leaks (where background sampled foreground).
         """
         h, w = image.shape[:2]
 
@@ -114,18 +115,25 @@ class StereoWarper:
             borderMode=cv2.BORDER_REPLICATE
         )
 
-        # Detect disocclusion holes:
-        # Destination pixel is background, but backward map reached into a foreground object.
+        # 1. Exact Forward Hole Detection (vectorized: target_x = round(grid_x + shift))
+        targets_x = np.round(grid_x + shift_map).astype(np.int32)
+        valid = (targets_x >= 0) & (targets_x < w)
+        flat_indices = grid_y[valid].astype(np.int32) * w + targets_x[valid]
+        hit_counts = np.bincount(flat_indices, minlength=h * w)
+        hole_mask = (hit_counts == 0).reshape((h, w)).astype(np.uint8) * 255
+
+        # 2. Backward sample leak detection (where background destination sampled foreground)
         sampled_x = np.clip(np.round(map_x).astype(np.int32), 0, w - 1)
         gy_int = grid_y.astype(np.int32)
         sampled_d = depth[gy_int, sampled_x]
+        leak_mask = (sampled_d > depth + 0.05)
+        hole_mask[leak_mask] = 255
 
-        leak_mask = (sampled_d > depth + 0.06).astype(np.uint8) * 255
-
-        if np.any(leak_mask):
+        # 3. Telea inpainting of true holes
+        if np.any(hole_mask):
             kernel = np.ones((3, 3), dtype=np.uint8)
-            leak_dilated = cv2.dilate(leak_mask, kernel, iterations=1)
-            inpainted = cv2.inpaint(warped, leak_dilated, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
+            hole_dilated = cv2.dilate(hole_mask, kernel, iterations=1)
+            inpainted = cv2.inpaint(warped, hole_dilated, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
             return inpainted
 
         return warped
