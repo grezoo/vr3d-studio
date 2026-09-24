@@ -73,6 +73,13 @@ class StereoWarper:
         # Non-negative disparity: background remains steady, subjects pop forward into natural 3D
         disparity = np.maximum(0.0, depth_map - bg_anchor) * max_shift
 
+        # 2-Layer Disocclusion Synthesis:
+        # Protect contours and disocclusion zones (elbows, limbs) from ghosting
+        fg_mask = (depth_map > (bg_anchor + 0.08)).astype(np.uint8) * 255
+        inpaint_mask = cv2.dilate(fg_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)))
+        bg_inpainted = cv2.inpaint(image_bgr, inpaint_mask, 7, cv2.INPAINT_TELEA)
+        fg_alpha = cv2.GaussianBlur(fg_mask.astype(np.float32) / 255.0, (5, 5), 0)[..., None]
+
         # Coordinate grid
         if self._cached_shape != (w, h):
             gx, gy = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
@@ -84,39 +91,50 @@ class StereoWarper:
         shift_left = -0.5 * disparity
         shift_right = 0.5 * disparity
 
-        left_eye = self._render_clean_view(image_bgr, depth_map, shift_left, grid_x, grid_y, is_left=True)
-        right_eye = self._render_clean_view(image_bgr, depth_map, shift_right, grid_x, grid_y, is_left=False)
+        left_eye = self._render_layered_view(image_bgr, bg_inpainted, fg_alpha, shift_left, grid_x, grid_y)
+        right_eye = self._render_layered_view(image_bgr, bg_inpainted, fg_alpha, shift_right, grid_x, grid_y)
 
         if swap_eyes:
             return right_eye, left_eye
         return left_eye, right_eye
 
-    def _render_clean_view(
+    def _render_layered_view(
         self,
-        image: np.ndarray,
-        depth: np.ndarray,
+        fg_image: np.ndarray,
+        bg_image: np.ndarray,
+        fg_alpha: np.ndarray,
         shift_map: np.ndarray,
         grid_x: np.ndarray,
-        grid_y: np.ndarray,
-        is_left: bool
+        grid_y: np.ndarray
     ) -> np.ndarray:
         """
-        Renders a single eye view using pure bilinear backward remap.
-        With non-negative disparity anchoring, continuous surfaces and object contours
-        are rendered with 100% original photo sharpness, silky anti-aliased edges,
-        zero ghosting, and zero inpainting bites.
+        Renders an eye view by warping the foreground layer over the complete background layer.
+        Eliminates duplicate limb ghosts (elbows, shoulders, legs) while preserving silky subpixel
+        anti-aliasing and razor-sharp original photo sharpness.
         """
         map_x = grid_x - shift_map
 
-        warped = cv2.remap(
-            image,
+        warped_fg = cv2.remap(
+            fg_image,
             map_x.astype(np.float32),
             grid_y,
             interpolation=cv2.INTER_LINEAR,
             borderMode=cv2.BORDER_REPLICATE
         )
 
-        return warped
+        warped_alpha = cv2.remap(
+            fg_alpha,
+            map_x.astype(np.float32),
+            grid_y,
+            interpolation=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=0
+        )
+        if warped_alpha.ndim == 2:
+            warped_alpha = warped_alpha[..., None]
+
+        composite = (warped_fg * warped_alpha + bg_image * (1.0 - warped_alpha)).astype(np.uint8)
+        return composite
 
     def create_sbs(
         self,
