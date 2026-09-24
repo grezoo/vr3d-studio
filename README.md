@@ -149,6 +149,16 @@ If you find **VR3D Studio** helpful and it saved you from expensive commercial s
 
 ---
 
+## 🌐 The Grezoo Open-Source Media Ecosystem
+
+Discover the complementary tools designed for VR creators and mobile media:
+
+* 🥽 [**VR-YouTube-3D-Downloader**](https://github.com/grezoo/VR-YouTube-3D-Downloader) – 100% Free (#Free) & Ad-Free (#AdFree) 4K/8K 3D VR and MP4/MP3 YouTube downloader with RTX NVENC EAC mesh conversion.
+* 📱 [**Mobile-media-Converter**](https://github.com/grezoo/Mobile-media-Converter) – High-speed 2D mobile video compressor & phone storage optimizer.
+* 🌌 [**vr3d-studio**](https://github.com/grezoo/vr3d-studio) – Open-source 2D to 3D stereoscopic SBS & VR180 AI converter.
+
+---
+
 ## 📜 License
 
 This project is licensed under the [MIT License](LICENSE).
