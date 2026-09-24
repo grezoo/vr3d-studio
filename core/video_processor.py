@@ -31,7 +31,7 @@ class VideoProcessor:
         input_image_path: str,
         output_image_path: str,
         mode: str = "sbs_full",
-        ipd_offset: float = 0.03,
+        ipd_offset: float = 0.035,
         convergence: float = 0.5,
         h_fov: float = 110.0,
         vr_size: int = 1920,
@@ -65,7 +65,9 @@ class VideoProcessor:
         else:
             raise ValueError(f"Unknown mode: {mode}")
 
-        imwrite_safe(output_image_path, result)
+        ext = os.path.splitext(output_image_path)[1].lower()
+        params = [int(cv2.IMWRITE_JPEG_QUALITY), 96] if ext in [".jpg", ".jpeg"] else None
+        imwrite_safe(output_image_path, result, params=params)
         return True
 
     def process_video(

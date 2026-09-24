@@ -384,6 +384,11 @@ class VR3DStudioApp(ctk.CTk):
         else:
             self.current_frame_bgr = imread_safe(file_path)
             self.scrub_frame.grid_remove()
+            # If mode is VR180, auto-switch to Full SBS 3D for optimal photo viewing
+            if self.MODE_DISPLAY_MAP.get(self.mode_var.get()) == "vr180":
+                sbs_label = "Full SBS 3D (Normál képernyős 3D - Teljes szélesség)"
+                self.mode_var.set(sbs_label)
+                self._on_mode_changed(sbs_label)
 
         self._invalidate_cache()
         self._trigger_preview_computation()
@@ -412,6 +417,12 @@ class VR3DStudioApp(ctk.CTk):
             text=f"📁 Album: {os.path.basename(folder_path)} ({len(self.album_files)} db fotó)"
         )
         self.scrub_frame.grid_remove()
+
+        # If mode is VR180, auto-switch to Full SBS 3D (_3DH_SBS) for photo albums
+        if self.MODE_DISPLAY_MAP.get(self.mode_var.get()) == "vr180":
+            sbs_label = "Full SBS 3D (Normál képernyős 3D - Teljes szélesség)"
+            self.mode_var.set(sbs_label)
+            self._on_mode_changed(sbs_label)
 
         # Load first photo as live preview
         self.current_frame_bgr = imread_safe(self.album_files[0])
@@ -804,6 +815,8 @@ class VR3DStudioApp(ctk.CTk):
                     "depth_only": "_Depth"
                 }
                 suffix = suffix_map.get(mode, f"_{mode}")
+                success_count = 0
+                error_count = 0
 
                 for idx, in_img_path in enumerate(self.album_files):
                     if not self.is_processing:
@@ -811,7 +824,8 @@ class VR3DStudioApp(ctk.CTk):
 
                     fname = os.path.basename(in_img_path)
                     root, ext = os.path.splitext(fname)
-                    out_img_path = os.path.join(self.output_file_path, f"{root}{suffix}{ext}")
+                    clean_root = root if root.endswith(suffix) else f"{root}{suffix}"
+                    out_img_path = os.path.join(self.output_file_path, f"{clean_root}{ext}")
 
                     ratio = idx / max(1, total)
                     self.after(0, lambda r=ratio: self.progress_bar.set(r))
@@ -820,11 +834,16 @@ class VR3DStudioApp(ctk.CTk):
                         text=f"Fotóalbum feldolgozása: {i}/{t} kép ({p}%)"
                     ))
 
-                    self.video_processor.process_image(
-                        in_img_path, out_img_path,
-                        mode=mode, ipd_offset=ipd, convergence=conv, h_fov=fov,
-                        swap_eyes=swap, auto_convergence=auto_conv
-                    )
+                    try:
+                        self.video_processor.process_image(
+                            in_img_path, out_img_path,
+                            mode=mode, ipd_offset=ipd, convergence=conv, h_fov=fov,
+                            swap_eyes=swap, auto_convergence=auto_conv
+                        )
+                        success_count += 1
+                    except Exception as img_err:
+                        print(f"[Album Error on {fname}]: {img_err}")
+                        error_count += 1
 
                     elapsed = time.time() - start_time
                     fps = (idx + 1) / max(0.001, elapsed)
@@ -836,10 +855,14 @@ class VR3DStudioApp(ctk.CTk):
 
                 if self.is_processing:
                     self.after(0, lambda: self.progress_bar.set(1.0))
-                    self.after(0, lambda: self.status_label.configure(text=f"Állapot: Kész ({total} fotó elkészült)."))
+                    self.after(0, lambda: self.status_label.configure(text=f"Állapot: Kész ({success_count} fotó elkészült)."))
                     self.after(0, lambda: messagebox.showinfo(
-                        "Siker", f"A fotóalbum ({total} kép) sikeresen elkészült a célmappában:\n{self.output_file_path}"
+                        "Siker", f"A fotóalbum ({success_count}/{total} kép) sikeresen elkészült a célmappában:\n{self.output_file_path}"
                     ))
+                    try:
+                        os.startfile(self.output_file_path)
+                    except Exception:
+                        pass
                 else:
                     self.after(0, lambda: self.status_label.configure(text="Állapot: Mappa konvertálás megszakítva."))
 
