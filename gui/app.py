@@ -176,27 +176,27 @@ class VR3DStudioApp(ctk.CTk):
 
         self.btn_preset_soft = ctk.CTkButton(
             preset_frame, text="Lágy 3D", width=65, height=26, fg_color="#34495E", hover_color="#2C3E50",
-            font=ctk.CTkFont(size=11), command=lambda: self._set_preset(0.010)
+            font=ctk.CTkFont(size=11), command=lambda: self._set_preset(0.020)
         )
         self.btn_preset_soft.pack(side="left", padx=(0, 3), expand=True, fill="x")
 
         self.btn_preset_norm = ctk.CTkButton(
             preset_frame, text="Természetes ✨", width=85, height=26, fg_color="#1F6AA5", hover_color="#144E75",
-            font=ctk.CTkFont(size=11, weight="bold"), command=lambda: self._set_preset(0.018)
+            font=ctk.CTkFont(size=11, weight="bold"), command=lambda: self._set_preset(0.035)
         )
         self.btn_preset_norm.pack(side="left", padx=3, expand=True, fill="x")
 
         self.btn_preset_strong = ctk.CTkButton(
             preset_frame, text="Erős 3D", width=65, height=26, fg_color="#34495E", hover_color="#2C3E50",
-            font=ctk.CTkFont(size=11), command=lambda: self._set_preset(0.028)
+            font=ctk.CTkFont(size=11), command=lambda: self._set_preset(0.050)
         )
         self.btn_preset_strong.pack(side="left", padx=(3, 0), expand=True, fill="x")
 
         # IPD / Disparity separation slider
-        self.lbl_ipd = ctk.CTkLabel(sidebar, text="3D Hatás: Természetes (Ajánlott) [1.8%]", font=ctk.CTkFont(size=11))
+        self.lbl_ipd = ctk.CTkLabel(sidebar, text="3D Hatás: Természetes (Ajánlott) [3.5%]", font=ctk.CTkFont(size=11))
         self.lbl_ipd.pack(padx=15, anchor="w")
-        self.slider_ipd = ctk.CTkSlider(sidebar, from_=0.005, to=0.045, number_of_steps=80, command=self._on_ipd_slide)
-        self.slider_ipd.set(0.018)
+        self.slider_ipd = ctk.CTkSlider(sidebar, from_=0.010, to=0.070, number_of_steps=60, command=self._on_ipd_slide)
+        self.slider_ipd.set(0.035)
         self.slider_ipd.pack(fill="x", padx=15, pady=(2, 10))
 
         # Convergence / Zero parallax plane slider
@@ -454,14 +454,14 @@ class VR3DStudioApp(ctk.CTk):
 
     def _get_ipd_label(self, val):
         pct = int(val * 1000) / 10.0
-        if val < 0.014:
+        if val < 0.025:
             desc = "Lágy (Pihentető)"
-        elif val <= 0.022:
+        elif val <= 0.042:
             desc = "Természetes (Ajánlott)"
-        elif val <= 0.032:
+        elif val <= 0.058:
             desc = "Erős (Látványos)"
         else:
-            desc = "Extrém (Kettőzhet)"
+            desc = "Extrém (Kiemelkedő)"
         return f"3D Hatás: {desc} [{pct:.1f}%]"
 
     def _set_preset(self, val):
@@ -471,9 +471,9 @@ class VR3DStudioApp(ctk.CTk):
     def _on_ipd_slide(self, val):
         self.lbl_ipd.configure(text=self._get_ipd_label(val))
         if hasattr(self, "btn_preset_soft"):
-            self.btn_preset_soft.configure(fg_color="#1F6AA5" if abs(val - 0.010) < 0.003 else "#34495E")
-            self.btn_preset_norm.configure(fg_color="#1F6AA5" if abs(val - 0.018) < 0.003 else "#34495E")
-            self.btn_preset_strong.configure(fg_color="#1F6AA5" if abs(val - 0.028) < 0.003 else "#34495E")
+            self.btn_preset_soft.configure(fg_color="#1F6AA5" if abs(val - 0.020) < 0.005 else "#34495E")
+            self.btn_preset_norm.configure(fg_color="#1F6AA5" if abs(val - 0.035) < 0.005 else "#34495E")
+            self.btn_preset_strong.configure(fg_color="#1F6AA5" if abs(val - 0.050) < 0.005 else "#34495E")
         self._invalidate_stereo_cache()
         self._trigger_preview_computation()
 
@@ -638,11 +638,11 @@ class VR3DStudioApp(ctk.CTk):
         mode = self.MODE_DISPLAY_MAP.get(self.mode_var.get(), "vr180")
 
         suffix_map = {
-            "vr180": "_180_sbs",
-            "sbs_full": "_3D_full_sbs",
-            "sbs_half": "_3D_half_sbs",
-            "anaglyph": "_3D_anaglyph",
-            "depth_only": "_depth"
+            "vr180": "_180_SBS",
+            "sbs_full": "_3DH_SBS",
+            "sbs_half": "_3DH_Half_SBS",
+            "anaglyph": "_3D_Anaglyph",
+            "depth_only": "_Depth"
         }
         suffix = suffix_map.get(mode, f"_{mode}")
         self.output_file_path = os.path.join(base_dir, f"{name}_MINTA_5mp{suffix}.mp4")
@@ -744,11 +744,11 @@ class VR3DStudioApp(ctk.CTk):
 
         # VR Headset standard naming suffixes (Pico, Quest, Skybox VR recognition)
         suffix_map = {
-            "vr180": "_180_sbs",
-            "sbs_full": "_3D_full_sbs",
-            "sbs_half": "_3D_half_sbs",
-            "anaglyph": "_3D_anaglyph",
-            "depth_only": "_depth"
+            "vr180": "_180_SBS",
+            "sbs_full": "_3DH_SBS",
+            "sbs_half": "_3DH_Half_SBS",
+            "anaglyph": "_3D_Anaglyph",
+            "depth_only": "_Depth"
         }
         suffix = suffix_map.get(mode, f"_{mode}")
         default_out = os.path.join(base_dir, f"{name}{suffix}{ext}")
@@ -797,11 +797,11 @@ class VR3DStudioApp(ctk.CTk):
                 start_time = time.time()
 
                 suffix_map = {
-                    "vr180": "_180_sbs",
-                    "sbs_full": "_3D_full_sbs",
-                    "sbs_half": "_3D_half_sbs",
-                    "anaglyph": "_3D_anaglyph",
-                    "depth_only": "_depth"
+                    "vr180": "_180_SBS",
+                    "sbs_full": "_3DH_SBS",
+                    "sbs_half": "_3DH_Half_SBS",
+                    "anaglyph": "_3D_Anaglyph",
+                    "depth_only": "_Depth"
                 }
                 suffix = suffix_map.get(mode, f"_{mode}")
 

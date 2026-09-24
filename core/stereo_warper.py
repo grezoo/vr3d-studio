@@ -16,12 +16,12 @@ class StereoWarper:
 
     def compute_auto_convergence(self, depth_map: np.ndarray) -> float:
         """
-        Analyzes the depth map in the primary central viewing area to find the dominant
-        foreground subject depth. Setting convergence to this value guarantees 0 disparity
-        on the subject, eliminating double contours (diplopia/ghosting) completely.
+        Analyzes the depth map in the primary central viewing area to set a balanced
+        convergence plane. Setting convergence to the median subject depth gives the subject
+        natural roundness and 3D volume while keeping disparity comfortable.
         """
         h, w = depth_map.shape[:2]
-        # Focus on the middle 60% of the screen where human eyes and subjects naturally reside
+        # Focus on the middle 60% of the screen
         y1, y2 = int(h * 0.15), int(h * 0.85)
         x1, x2 = int(w * 0.20), int(w * 0.80)
         center_roi = depth_map[y1:y2, x1:x2]
@@ -29,15 +29,15 @@ class StereoWarper:
         if center_roi.size == 0:
             return 0.5
 
-        # 75th percentile represents the front surface of the primary subject
-        auto_conv = float(np.percentile(center_roi, 75))
-        return float(np.clip(auto_conv, 0.25, 0.85))
+        # 50th percentile (median) gives true front-to-back 3D depth and volume to the main subject
+        auto_conv = float(np.median(center_roi))
+        return float(np.clip(auto_conv, 0.20, 0.70))
 
     def generate_stereo_pair(
         self,
         image_bgr: np.ndarray,
         depth_map: np.ndarray,
-        ipd_offset: float = 0.018,
+        ipd_offset: float = 0.035,
         convergence: float = 0.5,
         fill_holes: bool = True,
         swap_eyes: bool = False,
@@ -53,7 +53,13 @@ class StereoWarper:
         if depth_map.max() > 1.0:
             depth_map = depth_map / 255.0
 
-        # Effective convergence plane: automatically calculated if enabled
+        # Dynamic depth range enhancement: ensure the scene utilizes the full depth range [0, 1]
+        p_low = float(np.percentile(depth_map, 2))
+        p_high = float(np.percentile(depth_map, 98))
+        if p_high - p_low > 0.10:
+            depth_map = np.clip((depth_map - p_low) / (p_high - p_low), 0.0, 1.0)
+
+        # Effective convergence plane
         if auto_convergence:
             eff_conv = self.compute_auto_convergence(depth_map)
         else:
@@ -72,16 +78,12 @@ class StereoWarper:
         grid_x, grid_y = self._cached_grid
 
         # Disparity map for Left Eye (-0.5 * disparity) and Right Eye (+0.5 * disparity)
-        # In our confirmed optics, Left Eye shift is -0.5 * disparity, Right Eye is +0.5 * disparity
-        # (with swapped order default for proper VR headset fusion)
         shift_left = -0.5 * disparity
         shift_right = 0.5 * disparity
 
         left_eye = self._render_clean_view(image_bgr, depth_map, shift_left, grid_x, grid_y, is_left=True)
         right_eye = self._render_clean_view(image_bgr, depth_map, shift_right, grid_x, grid_y, is_left=False)
 
-        # Default is already calibrated to the user's verified correct 3D fusion:
-        # If swap_eyes is requested, invert it.
         if swap_eyes:
             return right_eye, left_eye
         return left_eye, right_eye
@@ -96,47 +98,39 @@ class StereoWarper:
         is_left: bool
     ) -> np.ndarray:
         """
-        Renders a single eye view using asymmetric edge-aware mapping.
-        Prevents foreground objects (e.g. human bodies, arms) from leaking into background disocclusions.
+        Renders a single eye view using physical background inpainting for disocclusion gaps.
+        Strictly prevents foreground objects (limbs, bodies) from leaking double-contour ghost
+        strips into adjacent background pixels.
         """
-        h, w, c = image.shape
+        h, w = image.shape[:2]
 
-        # Detect sharp depth edges where foreground meets background
-        # Horizontal gradient of depth
-        depth_grad_x = cv2.Sobel(depth, cv2.CV_32F, 1, 0, ksize=3)
-
-        # Build clean lookup map
-        # Base mapping:
         map_x = grid_x - shift_map
 
-        # Occlusion edge protection:
-        # Prevents foreground objects (human bodies, arms) from leaking ghost contours into background disocclusions.
-        clean_shift = shift_map.copy()
+        # Sampled source depth
+        sampled_x = np.clip(np.round(map_x).astype(np.int32), 0, w - 1)
+        gy_int = grid_y.astype(np.int32)
+        sampled_d = depth[gy_int, sampled_x]
 
-        # Edge threshold for depth difference (0.08 catches both sharp and softer body boundaries)
-        edge_threshold = 0.08
+        # Detect disocclusion leak:
+        # A destination pixel is background, but backward remap incorrectly reached into a foreground object.
+        leak_mask = (sampled_d > depth + 0.06)
+
+        # Dilate 2px horizontally in the disocclusion direction to clean up edge anti-aliasing
+        kernel = np.ones((1, 3), dtype=np.uint8)
+        leak_dilated = cv2.dilate(leak_mask.astype(np.uint8), kernel) > 0
+
+        # In disocclusion gaps, clamp map_x to strictly sample from the background
+        map_x_clean = map_x.copy()
         if is_left:
-            # Falling edge (foreground on left, background on right): grad_x < -threshold
-            disoccl_mask = (depth_grad_x < -edge_threshold)
-            # Dilate strictly to the RIGHT into the background disocclusion shadow
-            kernel = np.zeros((1, 9), dtype=np.uint8)
-            kernel[0, 4:] = 1
+            # Left eye: foreground shifted left, hole opened on right of subject.
+            # Backward map reached left (< grid_x) into foreground. Clamp to background (>= grid_x).
+            map_x_clean = np.where(leak_dilated, np.maximum(map_x, grid_x), map_x)
         else:
-            # Rising edge (background on left, foreground on right): grad_x > threshold
-            disoccl_mask = (depth_grad_x > edge_threshold)
-            # Dilate strictly to the LEFT into the background disocclusion shadow
-            kernel = np.zeros((1, 9), dtype=np.uint8)
-            kernel[0, :5] = 1
+            # Right eye: foreground shifted right, hole opened on left of subject.
+            # Backward map reached right (> grid_x) into foreground. Clamp to background (<= grid_x).
+            map_x_clean = np.where(leak_dilated, np.minimum(map_x, grid_x), map_x)
 
-        disoccl_dilated = cv2.dilate(disoccl_mask.astype(np.uint8), kernel) > 0
-
-        # In disocclusion shadows, completely zero out shift to eliminate double contour bleeding
-        if np.any(disoccl_dilated):
-            clean_shift[disoccl_dilated] = 0.0
-
-        map_x_clean = grid_x - clean_shift
-
-        # Remap image with edge clamping
+        # Remap with edge clamping
         warped = cv2.remap(
             image,
             map_x_clean.astype(np.float32),
@@ -144,7 +138,6 @@ class StereoWarper:
             interpolation=cv2.INTER_LINEAR,
             borderMode=cv2.BORDER_REPLICATE
         )
-
         return warped
 
     def create_sbs(
