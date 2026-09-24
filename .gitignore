@@ -41,6 +41,11 @@ weights/*.pt
 *.mov
 *.avi
 *.temp_video.mp4
+*.npy
+*.jpg
+*.jpeg
+*.png
+*.gif
 tests/output/*
 !tests/output/.gitkeep
 _3D_album/
