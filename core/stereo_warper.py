@@ -16,28 +16,28 @@ class StereoWarper:
 
     def compute_auto_convergence(self, depth_map: np.ndarray) -> float:
         """
-        Analyzes the depth map in the primary central viewing area to set a balanced
-        convergence plane. Setting convergence to the median subject depth gives the subject
-        natural roundness and 3D volume while keeping disparity comfortable.
+        Analyzes the depth map to set an optimal convergence plane.
+        Balancing between the background and median subject depth creates a pronounced
+        pop-out effect where the subject reaches forward into the VR viewing space.
         """
         h, w = depth_map.shape[:2]
-        # Focus on the middle 60% of the screen
         y1, y2 = int(h * 0.15), int(h * 0.85)
         x1, x2 = int(w * 0.20), int(w * 0.80)
         center_roi = depth_map[y1:y2, x1:x2]
 
         if center_roi.size == 0:
-            return 0.5
+            return 0.35
 
-        # 50th percentile (median) gives true front-to-back 3D depth and volume to the main subject
-        auto_conv = float(np.median(center_roi))
-        return float(np.clip(auto_conv, 0.20, 0.70))
+        p25 = float(np.percentile(depth_map, 25))
+        med = float(np.median(center_roi))
+        auto_conv = 0.40 * p25 + 0.60 * med
+        return float(np.clip(auto_conv, 0.15, 0.50))
 
     def generate_stereo_pair(
         self,
         image_bgr: np.ndarray,
         depth_map: np.ndarray,
-        ipd_offset: float = 0.035,
+        ipd_offset: float = 0.038,
         convergence: float = 0.5,
         fill_holes: bool = True,
         swap_eyes: bool = False,
@@ -99,11 +99,12 @@ class StereoWarper:
     ) -> np.ndarray:
         """
         Renders a single eye view using pure bilinear backward remap for continuous surfaces,
-        combined with surgical depth-edge discontinuity inpainting.
+        combined with surgical background-leak-only inpainting.
 
         Continuous surfaces retain 100% of their original photo sharpness and grain.
-        Only genuine depth occlusions/disocclusions (|sampled_d - depth| > 0.15)
-        are selectively touched to eliminate ghost stripes and duplicate silhouettes.
+        Foreground objects are never modified, eliminating edge fringes.
+        Background pixels that sampled across steep depth boundaries into foreground
+        (sampled_d > depth + 0.05) are cleanly healed.
         """
         h, w = image.shape[:2]
 
@@ -118,19 +119,19 @@ class StereoWarper:
             borderMode=cv2.BORDER_REPLICATE
         )
 
-        # 2. Targeted Depth Edge Discontinuity Detection
+        # 2. Targeted Background Leak Detection
         sampled_x = np.clip(np.round(map_x).astype(np.int32), 0, w - 1)
         gy_int = grid_y.astype(np.int32)
         sampled_d = depth[gy_int, sampled_x]
 
-        # Discontinuity occurs when backward sampling jumps across a steep depth boundary
-        edge_discontinuity = (np.abs(sampled_d - depth) > 0.15).astype(np.uint8) * 255
+        # Ghosting occurs strictly when background destination samples foreground
+        leak_bg_to_fg = (sampled_d > depth + 0.05).astype(np.uint8) * 255
 
-        # 3. Surgical inpainting restricted strictly to edge boundary pixels (~0.4% of image)
-        if np.any(edge_discontinuity):
-            kernel = np.ones((3, 3), dtype=np.uint8)
-            edge_dilated = cv2.dilate(edge_discontinuity, kernel, iterations=1)
-            inpainted = cv2.inpaint(warped, edge_dilated, inpaintRadius=2, flags=cv2.INPAINT_TELEA)
+        # 3. Surgical inpainting restricted strictly to background leak pixels
+        if np.any(leak_bg_to_fg):
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            leak_dilated = cv2.dilate(leak_bg_to_fg, kernel, iterations=1)
+            inpainted = cv2.inpaint(warped, leak_dilated, inpaintRadius=2, flags=cv2.INPAINT_TELEA)
             return inpainted
 
         return warped
