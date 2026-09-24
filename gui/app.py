@@ -132,9 +132,10 @@ class VR3DStudioApp(ctk.CTk):
 
         # Display mapping dictionaries
         self.MODEL_DISPLAY_MAP = {
-            "vits (Gyors / Kis modell)": "vits",
-            "vitb (Közepes / Kiegyensúlyozott)": "vitb",
-            "vitl (Nagy / Csúcsminőségű térhatás)": "vitl"
+            "Depth Anything V2 (Kis / Villámgyors)": "vits",
+            "Depth Anything V2 (Közepes / Kiegyensúlyozott)": "vitb",
+            "Depth Anything V2 (Nagy / Csúcsminőség)": "vitl",
+            "Hugging Face: Marigold LCM (Diffúziós 3D)": "marigold"
         }
         self.MODEL_INTERNAL_MAP = {v: k for k, v in self.MODEL_DISPLAY_MAP.items()}
 
@@ -146,6 +147,14 @@ class VR3DStudioApp(ctk.CTk):
             "Csak Mélységtérkép (Hőtérkép)": "depth_only"
         }
         self.MODE_INTERNAL_MAP = {v: k for k, v in self.MODE_DISPLAY_MAP.items()}
+
+        self.PROFILE_DISPLAY_MAP = {
+            "[1] Természetes 3D (Kényelmes, 3.5%)": (0.035, 0.50),
+            "[2] Mély Dinamikus 3D (Látványos, 5.0%)": (0.050, 0.35),
+            "[3] Pop-Out (Kilóg a képből! 6.5%)": (0.065, 0.15),
+            "[4] Extrém 3D Térhatás (8.0%)": (0.080, 0.10),
+            "[0] Lágy 3D (Pihentető, 2.0%)": (0.020, 0.50),
+        }
 
         # Model Selector
         ctk.CTkLabel(sidebar, text="AI Modell:", font=ctk.CTkFont(size=11, weight="bold")).pack(padx=15, anchor="w")
@@ -169,33 +178,21 @@ class VR3DStudioApp(ctk.CTk):
         )
         self.cmb_mode.pack(fill="x", padx=15, pady=(2, 10))
 
-        # 3D Presets / Quick profiles
-        ctk.CTkLabel(sidebar, text="3D Hatás Erőssége (Gyorsválasztó):", font=ctk.CTkFont(size=11, weight="bold")).pack(padx=15, anchor="w")
-        preset_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
-        preset_frame.pack(fill="x", padx=15, pady=(2, 6))
-
-        self.btn_preset_soft = ctk.CTkButton(
-            preset_frame, text="Lágy 3D", width=65, height=26, fg_color="#34495E", hover_color="#2C3E50",
-            font=ctk.CTkFont(size=11), command=lambda: self._set_preset(0.020)
+        # 3D Profile Selector
+        ctk.CTkLabel(sidebar, text="3D Térhatás Karakter (Profil):", font=ctk.CTkFont(size=11, weight="bold"), text_color="#F39C12").pack(padx=15, anchor="w")
+        self.profile_var = ctk.StringVar(value=list(self.PROFILE_DISPLAY_MAP.keys())[0])
+        self.cmb_profile = ctk.CTkOptionMenu(
+            sidebar,
+            values=list(self.PROFILE_DISPLAY_MAP.keys()),
+            variable=self.profile_var,
+            command=self._on_profile_changed
         )
-        self.btn_preset_soft.pack(side="left", padx=(0, 3), expand=True, fill="x")
-
-        self.btn_preset_norm = ctk.CTkButton(
-            preset_frame, text="Természetes ✨", width=85, height=26, fg_color="#1F6AA5", hover_color="#144E75",
-            font=ctk.CTkFont(size=11, weight="bold"), command=lambda: self._set_preset(0.035)
-        )
-        self.btn_preset_norm.pack(side="left", padx=3, expand=True, fill="x")
-
-        self.btn_preset_strong = ctk.CTkButton(
-            preset_frame, text="Erős 3D", width=65, height=26, fg_color="#34495E", hover_color="#2C3E50",
-            font=ctk.CTkFont(size=11), command=lambda: self._set_preset(0.050)
-        )
-        self.btn_preset_strong.pack(side="left", padx=(3, 0), expand=True, fill="x")
+        self.cmb_profile.pack(fill="x", padx=15, pady=(2, 10))
 
         # IPD / Disparity separation slider
         self.lbl_ipd = ctk.CTkLabel(sidebar, text="3D Hatás: Természetes (Ajánlott) [3.5%]", font=ctk.CTkFont(size=11))
         self.lbl_ipd.pack(padx=15, anchor="w")
-        self.slider_ipd = ctk.CTkSlider(sidebar, from_=0.010, to=0.070, number_of_steps=60, command=self._on_ipd_slide)
+        self.slider_ipd = ctk.CTkSlider(sidebar, from_=0.010, to=0.090, number_of_steps=80, command=self._on_ipd_slide)
         self.slider_ipd.set(0.035)
         self.slider_ipd.pack(fill="x", padx=15, pady=(2, 10))
 
@@ -462,6 +459,14 @@ class VR3DStudioApp(ctk.CTk):
             self.lbl_fov.pack_forget()
             self.slider_fov.pack_forget()
         self._render_current_tab()
+
+    def _on_profile_changed(self, choice):
+        if choice in self.PROFILE_DISPLAY_MAP:
+            ipd, conv = self.PROFILE_DISPLAY_MAP[choice]
+            self.slider_ipd.set(ipd)
+            self._on_ipd_slide(ipd)
+            self.slider_conv.set(conv)
+            self._on_conv_slide(conv)
 
     def _get_ipd_label(self, val):
         pct = int(val * 1000) / 10.0
